@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Terra Helix</title>
+
+  <!-- Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+  <!-- OpenLayers CSS -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+
+  <style>
+    :root {
+      --primary-bg: #0d1b2a;
+      --secondary-bg: #1b263b;
+      --accent-color: #00b4d8;
+      --text-light: #f8f9fa;
+      --card-bg: #243447;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: var(--primary-bg);
+      color: var(--text-light);
+    }
+
+    header {
+      background-color: var(--secondary-bg);
+      color: var(--text-light);
+      text-align: center;
+      padding: 15px 0;
+      font-size: 1.5rem;
+      font-weight: 600;
+      letter-spacing: 1px;
+      border-bottom: 2px solid var(--accent-color);
+    }
+
+    .sidebar {
+      background-color: var(--secondary-bg);
+      color: var(--text-light);
+      padding: 1rem;
+      height: 100%;
+      overflow-y: auto;
+      box-shadow: inset -2px 0 5px rgba(0,0,0,0.3);
+    }
+
+    .sidebar h4 {
+      color: var(--accent-color);
+      margin-bottom: 1rem;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--accent-color);
+      border-radius: 10px;
+      color: var(--text-light);
+    }
+
+    .card-title {
+      color: var(--accent-color);
+      font-weight: 600;
+    }
+
+    .filter-btn {
+      background-color: var(--accent-color);
+      color: white;
+      border: none;
+      border-radius: 25px;
+      padding: 10px 20px;
+      font-weight: 600;
+      box-shadow: 0 3px 8px rgba(0, 180, 216, 0.4);
+      transition: all 0.3s ease;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+
+    .filter-btn:hover {
+      background-color: #0096c7;
+      transform: translateY(-2px);
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .ol-zoom {
+      top: 10px;
+      right: 10px;
+      left: auto;
+    }
+
+    .ol-scale-line {
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 10px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--accent-color);
+      border-radius: 4px;
+    }
+  </style>
+</head>
+<body>
+
+<header>Terra Helix Dashboard</header>
+
+<div class="container-fluid">
+  <div class="row vh-100">
+
+    <!-- Left Sidebar -->
+    <div class="col-md-3 sidebar">
+
+      <h4>Information</h4>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h5 class="card-title">Total Charity</h5>
+          <p class="card-text" id="totalCharity">-</p>
+        </div>
+      </div>
+
+      <div class="card mb-3">
+        <div class="card-body">
+          <h5 class="card-title">Total Care Homes</h5>
+          <p class="card-text" id="totalCareHomes">-</p>
+        </div>
+      </div>
+
+      <div class="mb-3">
+        <label for="charityTypeSelect" class="form-label" style="color: var(--accent-color); font-weight:600;">Select Charity Type</label>
+        <select id="charityTypeSelect" class="form-select">
+          <option value="All" selected>All</option>
+        </select>
+      </div>
+
+      <div class="mb-3">
+        <label for="careHomeSelect" class="form-label" style="color: var(--accent-color); font-weight:600;">Select Care Home</label>
+        <select id="careHomeSelect" class="form-select">
+            <option value="" selected disabled>--Choose Care Home--</option>
+        </select>
+      </div>
+
+      
+    </div>
+
+    <!-- Right Map Section -->
+    <div class="col-md-9 p-0">
+      <div id="map"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Info Modal -->
+<div class="modal fade" id="infoModal" tabindex="-1" aria-labelledby="infoModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content bg-secondary text-light">
+      <div class="modal-header">
+        <h5 class="modal-title" id="infoModalLabel">Details</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" id="modalBody"></div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-light" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- OpenLayers JS -->
+<script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
+<script>
+const osmLayer = new ol.layer.Tile({ source: new ol.source.OSM() });
+
+const map = new ol.Map({
+  target: 'map',
+  layers: [osmLayer],
+  view: new ol.View({
+    center: ol.proj.fromLonLat([-2,54]),
+    zoom: 4
+  })
+});
+
+map.addControl(new ol.control.ScaleLine());
+
+// Charity and Care Home Layers
+const charityHomeSource = new ol.source.Vector();
+const charityHomeLayer = new ol.layer.Vector({
+  source: charityHomeSource,
+  style: new ol.style.Style({
+    image: new ol.style.Circle({ radius:6, fill: new ol.style.Fill({ color:'red' }), stroke: new ol.style.Stroke({ color:'white', width:2 }) })
+  })
+});
+map.addLayer(charityHomeLayer);
+
+const careHomesSource = new ol.source.Vector();
+const careHomesLayer = new ol.layer.Vector({
+  source: careHomesSource,
+  style: new ol.style.Style({
+    image: new ol.style.Circle({ radius:6, fill: new ol.style.Fill({ color:'blue' }), stroke: new ol.style.Stroke({ color:'white', width:2 }) })
+  })
+});
+map.addLayer(careHomesLayer);
+
+let allCharityFeatures = [];
+
+// Load Care Homes
+Papa.parse('carehomes_geocoded.csv', {
+  download: true, header: true, complete: function(results) {
+    let count = 0;
+    results.data.forEach(row => {
+      if(!row.longitude || !row.latitude) return;
+      const feature = new ol.Feature({
+        geometry: new ol.geom.Point(ol.proj.fromLonLat([parseFloat(row.longitude), parseFloat(row.latitude)])),
+        data: row
+      });
+      careHomesSource.addFeature(feature);
+      count++;
+    });
+    document.getElementById('totalCareHomes').textContent = count;
+    // Populate care home dropdown
+const careHomeSelect = document.getElementById('careHomeSelect');
+careHomesSource.getFeatures().forEach((feature, index) => {
+  const option = document.createElement('option');
+  option.value = index; // store feature index
+  option.textContent = feature.get('data').Name;
+  careHomeSelect.appendChild(option);
+});
+
+  }
+});
+
+// Load Charities
+Papa.parse('charities_geocoded.csv', {
+  download:true, header:true, complete:function(results){
+    let charityTypes = new Set();
+    let count = 0;
+
+    results.data.forEach(row => {
+      if(!row.longitude || !row.latitude) return;
+
+      const feature = new ol.Feature({
+        geometry: new ol.geom.Point(ol.proj.fromLonLat([parseFloat(row.longitude), parseFloat(row.latitude)])),
+        data: row
+      });
+      charityHomeSource.addFeature(feature);
+      allCharityFeatures.push(feature);
+
+      if(row.Type) charityTypes.add(row.Type);
+      count++;
+    });
+
+    document.getElementById('totalCharity').textContent = count;
+
+    // Populate type dropdown
+    const typeSelect = document.getElementById('charityTypeSelect');
+    charityTypes.forEach(type => {
+      const option = document.createElement('option');
+      option.value = type;
+      option.textContent = type;
+      typeSelect.appendChild(option);
+    });
+
+  }
+});
+
+// Charity type filter
+document.getElementById('charityTypeSelect').addEventListener('change', function() {
+  const type = this.value;
+  charityHomeSource.clear();
+  allCharityFeatures.forEach(feature => {
+    if(type === 'All' || feature.get('data').Type === type){
+      charityHomeSource.addFeature(feature);
+    }
+  });
+});
+
+// Care Home dropdown - show charities within 3 km
+document.getElementById('careHomeSelect').addEventListener('change', function() {
+  const idx = this.value;
+  if(idx === "") return;
+
+  const careFeature = careHomesSource.getFeatures()[idx];
+  const careCoord = careFeature.getGeometry().getCoordinates();
+  const careName = careFeature.get('data').Name;
+
+  const nearbyCharities = [];
+  charityHomeSource.getFeatures().forEach(charityFeature => {
+    const charityCoord = charityFeature.getGeometry().getCoordinates();
+    const distance = ol.sphere.getDistance(
+      ol.proj.toLonLat(careCoord),
+      ol.proj.toLonLat(charityCoord)
+    );
+    if(distance <= 3000) { // 3 km
+      nearbyCharities.push({
+        name: charityFeature.get('data').Name,
+        distance: Math.round(distance)
+      });
+    }
+  });
+
+  let html = `<h5>Charities within 3 km of "${careName}"</h5>`;
+  if(nearbyCharities.length === 0){
+    html += '<p>No charities found within 3 km.</p>';
+  } else {
+    html += '<ul class="list-group">';
+    nearbyCharities.forEach(item => {
+      html += `<li class="list-group-item bg-dark text-light">${item.name} - ${item.distance} m</li>`;
+    });
+    html += '</ul>';
+  }
+
+  document.getElementById('modalBody').innerHTML = html;
+  const myModal = new bootstrap.Modal(document.getElementById('infoModal'));
+  myModal.show();
+});
+
+
+// Map click - show feature details in modal
+map.on('singleclick', function(evt){
+  const feature = map.forEachFeatureAtPixel(evt.pixel, f=>f);
+  if(feature){
+    const data = feature.get('data');
+    let html = '<ul class="list-group">';
+    for(let key in data){
+      if(data.hasOwnProperty(key)){
+        html += `<li class="list-group-item bg-dark text-light"><strong>${key}:</strong> ${data[key]}</li>`;
+      }
+    }
+    html += '</ul>';
+    document.getElementById('modalBody').innerHTML = html;
+    const myModal = new bootstrap.Modal(document.getElementById('infoModal'));
+    myModal.show();
+  }
+});
+</script>
+</body>
+</html>
